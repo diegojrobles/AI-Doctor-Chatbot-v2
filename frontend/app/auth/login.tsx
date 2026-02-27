@@ -7,7 +7,7 @@ import { storeToken } from '../../utils/storage';
 
 
 // const API_BASE_URL = 'http://localhost:8000';
-const API_BASE_URL = 'https://ai-doctor-chatbot-zw8n.onrender.com';
+const API_BASE_URL = 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

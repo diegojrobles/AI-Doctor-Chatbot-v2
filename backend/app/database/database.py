@@ -6,7 +6,7 @@ from typing import Annotated
 import os
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql://yui:061176@localhost:5432/doctorchatbot"
+    "DATABASE_URL", os.environ.get("DATABASE_URL", "postgresql://diegorobles@localhost/aidoctor")
 )
 
 engine = create_engine(DATABASE_URL)
