@@ -2,16 +2,16 @@ from app.services.vector_store import query_medical_knowledge
 from app.services.pubmed_service import get_article_from_pubmed
 from app.openrouter_client import extract_medical_keywords
 from app.services.pinecone_service import pinecone_service
+from app.utils.metrics import timer
 
 
 def get_medical_context(symptoms: str, min_results: int = 5):
     print(f"🔧 Pinecone index available: {pinecone_service.index is not None}")
 
-    # First try Pinecone
-    results = query_medical_knowledge(symptoms, n_results=min_results + 2)
+    # First try Pinecone (timed — this is the "retrieval" half of RAG latency)
+    with timer("retrieval_latency_ms"):
+        results = query_medical_knowledge(symptoms, n_results=min_results + 2)
     print(f"🔧 Raw Pinecone results: {results}")
-    # First try Pinecone
-    results = query_medical_knowledge(symptoms, n_results=min_results + 2)
     documents = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]
     distances = results.get("distances", [[]])[0]

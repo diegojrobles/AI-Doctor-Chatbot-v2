@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from app.database.models import User, UserFHIRMapping
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -18,6 +19,9 @@ from app.services.rag_service import get_medical_context
 from app.services.auth_service import get_current_user
 from app.services.map_service import maps_service
 from app.services.healthcare_analyzer import analyze_healthcare_needs
+from app.utils import metrics
+import re
+import time
 
 router = APIRouter()
 
@@ -28,6 +32,7 @@ def enhanced_advice_with_ehr(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _request_start = time.perf_counter()
     mapping = (
         db.query(UserFHIRMapping)
         .filter(UserFHIRMapping.user_id == current_user.id)
@@ -286,7 +291,22 @@ def enhanced_advice_with_ehr(
     else:
         print("ℹ️ No healthcare recommendations to add")
 
-    return response_data
+    metrics.record(
+        "end_to_end_latency_ms", (time.perf_counter() - _request_start) * 1000
+    )
+
+    # Validate before returning: if the LLM response is missing required
+    # fields, fail with an explicit 502 (which goes through the normal
+    # exception handlers and gets CORS headers) instead of letting FastAPI's
+    # response_model validation raise an unhandled 500 with no CORS headers.
+    try:
+        return EnhancedAdviceOutWithReminders.model_validate(response_data)
+    except ValidationError as e:
+        print(f"❌ LLM response failed schema validation: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="The AI model returned an incomplete response. Please try again.",
+        )
 
 
 def create_fallback_symptom_analysis(symptoms: str, duration: str) -> list:
@@ -358,8 +378,6 @@ def estimate_duration_minutes(duration: str) -> int:
             return 360  # 6 hours
         else:
             # Extract number of hours
-            import re
-
             numbers = re.findall(r"\d+", duration)
             if numbers:
                 return int(numbers[0]) * 60

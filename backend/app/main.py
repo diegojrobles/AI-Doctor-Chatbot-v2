@@ -55,6 +55,7 @@ async def authenticate_request(request: Request, call_next):
         # "/ehr-advice",
         "/triage",
         # "/analytics",
+        "/metrics",
     ]
 
     # Check if path starts with any public path
@@ -139,6 +140,14 @@ try:
     print("✅ Reminder routes registered")
 except ImportError as e:
     print(f"Reminder routes not available: {e}")
+
+try:
+    from app.routes.metrics import router as metrics_router
+
+    app.include_router(metrics_router)
+    print("✅ Metrics routes registered")
+except ImportError as e:
+    print(f"Metrics routes not available: {e}")
 
 
 @app.get("/")

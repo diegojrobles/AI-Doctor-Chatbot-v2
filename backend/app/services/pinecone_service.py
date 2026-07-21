@@ -1,11 +1,19 @@
 import pinecone
 import os
+from dotenv import load_dotenv
+
+load_dotenv()  # so local runs pick up .env
 
 
 class PineconeService:
     def __init__(self):
-        self.api_key = "***REMOVED***"
-        self.index_name = "medical-knowledge"
+        self.api_key = os.getenv("PINECONE_API_KEY")
+        self.index_name = os.getenv("PINECONE_INDEX_NAME", "medical-knowledge")
+
+        if not self.api_key:
+            print("❌ PINECONE_API_KEY not set — Pinecone service disabled")
+            self.index = None
+            return
 
         try:
             # Initialize Pinecone with the new SDK
@@ -28,11 +36,13 @@ class PineconeService:
 
             print(f"🔍 Querying Pinecone for: {query}")
 
+            
             # Use search() for integrated embeddings
             results = self.index.search(
                 namespace="medical-namespace",
                 query={"inputs": {"text": query}, "top_k": n_results},
-                fields=["text"],  # Specify which metadata fields to return
+                # Omit `fields` so Pinecone returns all stored metadata
+                # (title, year, journal, pubmed_id, etc.), not just "text".
             )
 
             # Format results to match your existing structure
@@ -43,7 +53,7 @@ class PineconeService:
             for hit in results["result"]["hits"]:
                 documents.append(hit["fields"].get("text", ""))
                 metadatas.append(hit["fields"])
-                distances.append(1 - hit["_score"])  # Convert similarity to distance
+                distances.append(1 - hit["score"])  # Convert similarity to distance
 
             print(f"✅ Found {len(documents)} results in Pinecone")
             return {
@@ -89,12 +99,21 @@ class PineconeService:
                 print("❌ No valid articles to store")
                 return False
 
-            print(f"🚀 Upserting {len(records)} records to Pinecone...")
+            # Pinecone rejects overly large request bodies in one shot, so
+            # send records in smaller batches instead of all at once.
+            batch_size = 90
+            total_stored = 0
+            for start in range(0, len(records), batch_size):
+                batch = records[start : start + batch_size]
+                print(
+                    f"🚀 Upserting batch {start // batch_size + 1} "
+                    f"({len(batch)} records) to Pinecone..."
+                )
+                # (SDK requires these as keyword args: records=, namespace=)
+                self.index.upsert_records(records=batch, namespace="medical-namespace")
+                total_stored += len(batch)
 
-            # Use upsert_records for integrated embeddings
-            self.index.upsert_records("medical-namespace", records)
-
-            print(f"✅ Successfully stored {len(records)} articles in Pinecone")
+            print(f"✅ Successfully stored {total_stored} articles in Pinecone")
             return True
 
         except Exception as e:

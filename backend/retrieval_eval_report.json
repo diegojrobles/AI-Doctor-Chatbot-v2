@@ -1,0 +1,93 @@
+{
+  "aggregate": {
+    "num_queries": 10,
+    "top_k": 5,
+    "hit_rate_at_5": 1.0,
+    "mean_precision_at_5": 0.98,
+    "mean_reciprocal_rank": 1.0,
+    "mean_similarity": 0.359,
+    "generated_at": "2026-07-20T19:16:35.019736+00:00"
+  },
+  "per_query": [
+    {
+      "query": "I have a bad headache and sensitivity to light",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.3
+    },
+    {
+      "query": "persistent dry cough for two weeks",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.416
+    },
+    {
+      "query": "sharp chest pain when breathing deeply",
+      "num_returned": 5,
+      "precision_at_k": 0.8,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.318
+    },
+    {
+      "query": "lower back pain after lifting something heavy",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.417
+    },
+    {
+      "query": "feeling dizzy and lightheaded when standing up",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.416
+    },
+    {
+      "query": "sore throat and difficulty swallowing",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.358
+    },
+    {
+      "query": "joint pain and swelling in my knees",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.319
+    },
+    {
+      "query": "nausea and stomach cramps after eating",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.367
+    },
+    {
+      "query": "shortness of breath during light exercise",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.383
+    },
+    {
+      "query": "skin rash that is red and itchy",
+      "num_returned": 5,
+      "precision_at_k": 1.0,
+      "hit": true,
+      "reciprocal_rank": 1.0,
+      "avg_similarity": 0.293
+    }
+  ]
+}

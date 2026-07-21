@@ -8,6 +8,8 @@
 import requests
 import os
 from dotenv import load_dotenv
+from fastapi import HTTPException
+from app.utils.metrics import timer
 
 load_dotenv()  # so local runs pick up .env
 
@@ -29,6 +31,12 @@ if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.startswith("sk-or-"):
 OPENROUTER_BASE = os.getenv("OPENROUTER_BASE", "https://openrouter.ai/api/v1")
 APP_REFERER = os.getenv("APP_REFERER", "http://localhost:8000")
 APP_TITLE = os.getenv("APP_TITLE", "AI Doctor App")
+
+# Model comes from .env (MODEL=...). Default is OpenRouter's Free Models
+# Router, which auto-selects from currently-available free models — resilient
+# to individual :free models being retired (which is what broke this app:
+# meta-llama/llama-3.3-70b-instruct:free was discontinued and returned 404).
+DEFAULT_MODEL = os.getenv("MODEL", "openrouter/free")
 
 # ------------------------------------------------------
 # Step 4: Safety check — verify API key exists and is valid
@@ -74,7 +82,12 @@ def extract_medical_keywords(symptoms_text: str) -> list[str] | None:
         return None
 
 
-def chat_completion(messages, model="meta-llama/llama-3.3-70b-instruct:free"):
+def chat_completion(
+    messages,
+    model=None,
+    temperature=0.5,
+):
+    model = model or DEFAULT_MODEL
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
@@ -85,17 +98,37 @@ def chat_completion(messages, model="meta-llama/llama-3.3-70b-instruct:free"):
     payload = {
         "model": model,
         "messages": messages,
-        "max_tokens": 400,
-        "temperature": 0.5,
+        # 400 was too small for the full advice JSON schema — the model's
+        # output got truncated mid-JSON, which broke parsing downstream.
+        "max_tokens": 2000,
+        "temperature": temperature,
     }
 
-    # Make the POST request to the API
-    r = requests.post(
-        f"{OPENROUTER_BASE}/chat/completions", json=payload, headers=headers, timeout=60
-    )
+    # Make the POST request to the API, timing how long the LLM takes to respond
+    try:
+        with timer("llm_latency_ms"):
+            r = requests.post(
+                f"{OPENROUTER_BASE}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=60,
+            )
+    except requests.RequestException as e:
+        # Network failure/timeout: surface as a proper 502 (goes through the
+        # normal exception handlers, so the response gets CORS headers)
+        # instead of an unhandled exception -> bare 500 without CORS headers.
+        print(f"❌ Could not reach OpenRouter: {e}")
+        raise HTTPException(
+            status_code=502, detail="Could not reach the AI service. Please try again."
+        )
+
     if not r.ok:
-        # If unauthorized or server error, print details
-        raise RuntimeError(f"OpenRouter API error {r.status_code}: {r.text[:500]}")
+        # If unauthorized, rate-limited, model retired, etc., print details
+        print(f"❌ OpenRouter API error {r.status_code}: {r.text[:500]}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error ({r.status_code}). Please try again.",
+        )
 
     # Return the model’s text output
     data = r.json()

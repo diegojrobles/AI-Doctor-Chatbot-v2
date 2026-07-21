@@ -13,7 +13,6 @@ email-validator==2.1.0
 argon2-cffi
 passlib[argon2]
 python-dateutil==2.8.2 
-chromadb>=0.4.0
 lxml>=4.9.0
 beautifulsoup4>=4.12.0
 pinecone

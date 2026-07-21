@@ -25,14 +25,19 @@ def parse_or_repair(raw: str) -> dict:
 
     # Attempt strict parse
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
     except json.JSONDecodeError:
         pass
 
-    # Attempt repair
+    # Attempt repair (must yield a JSON object, not a bare string/list)
     try:
         fixed = repair_json(raw)
-        return json.loads(fixed)
+        parsed = json.loads(fixed)
+        if not isinstance(parsed, dict):
+            raise ValueError("repaired JSON is not an object")
+        return parsed
     except Exception:
         raise HTTPException(
             status_code=502, detail=f"Model did not return valid JSON: {raw[:300]}"
