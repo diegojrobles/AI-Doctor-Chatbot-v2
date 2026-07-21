@@ -18,3 +18,8 @@ docker-compose.yml
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+*.pyc
