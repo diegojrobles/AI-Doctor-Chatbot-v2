@@ -38,8 +38,8 @@ This project is part of the **Google Developer Group (GDG) Mentorship Program**,
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/joebrashear31/AI-Doctor-App.git
-cd AI-Doctor-App
+git clone https://github.com/diegojrobles/AI-Doctor-Chatbot-v2.git
+cd AI-Doctor-Chatbot-v2
 ```
 
 ### 2️⃣ Backend Setup (FastAPI)
