@@ -1,6 +1,8 @@
 # 🩺 AI Doctor App  
 **GDG Mentorship Project • AI-powered Primary Care Companion**
 
+Mentees, Yui, Dustin, Hana, Diego
+
 A mobile-first healthcare assistant built with **React Native (Expo)** and **FastAPI**, designed to provide:
 - At-home care suggestions (non-diagnostic)  
 - Clinician-reviewed specialist referrals  
