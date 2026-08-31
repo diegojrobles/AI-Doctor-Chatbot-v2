@@ -390,10 +390,42 @@ Install Docker:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2 git awscli
+sudo apt-get install -y docker.io docker-compose-v2 git
 sudo usermod -aG docker ubuntu
 newgrp docker
 ```
+
+Install the AWS CLI. Ubuntu 24.04 dropped the `awscli` apt package — `apt install
+awscli` fails with "no installation candidate". Use snap:
+
+```bash
+sudo snap install aws-cli --classic
+```
+
+If snap is unavailable, use the official installer. `t4g` instances are ARM, so
+the URL must be the `aarch64` build — confirm with `uname -m`:
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o awscliv2.zip
+unzip -q awscliv2.zip && sudo ./aws/install && rm -rf awscliv2.zip aws
+```
+
+Verify everything is present:
+
+```bash
+aws --version; docker --version; docker compose version
+```
+
+You do **not** run `aws configure` here. The instance authenticates through its
+IAM role. Confirm that works — this is also the check that the instance profile
+attached correctly:
+
+```bash
+aws ssm get-parameters-by-path --path /aidoctor/prod/ --query 'Parameters[].Name'
+```
+
+It should list all five parameter names. A permissions error here means
+`deploy.sh` will fail at container start.
 
 1GB of RAM is snug with Postgres. Add swap so the kernel does not kill a
 container under a memory spike:
