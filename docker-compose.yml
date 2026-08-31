@@ -50,7 +50,10 @@ services:
       MODEL: ${MODEL:-openrouter/free}
       APP_REFERER: ${APP_REFERER:-https://api.diegojrobles.com}
       APP_TITLE: ${APP_TITLE:-AI Doctor App}
+      # Both are set on purpose: botocore reads AWS_DEFAULT_REGION and ignores
+      # AWS_REGION, while other tooling expects AWS_REGION.
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
     depends_on:
       db:
         condition: service_healthy

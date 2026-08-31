@@ -32,6 +32,52 @@ import sys
 SSM_PATH_VAR = "AIDOCTOR_SSM_PATH"
 
 
+def _region_from_imds() -> str | None:
+    """Ask the EC2 instance metadata service which region we are in.
+
+    Last-resort fallback so the container works even when no region variable
+    was passed in. Uses IMDSv2 (token first), which is required on instances
+    configured with HttpTokens=required.
+    """
+    import json
+    import urllib.request
+
+    try:
+        token = urllib.request.urlopen(
+            urllib.request.Request(
+                "http://169.254.169.254/latest/api/token",
+                method="PUT",
+                headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            ),
+            timeout=2,
+        ).read().decode()
+
+        doc = urllib.request.urlopen(
+            urllib.request.Request(
+                "http://169.254.169.254/latest/dynamic/instance-identity/document",
+                headers={"X-aws-ec2-metadata-token": token},
+            ),
+            timeout=2,
+        )
+        return json.load(doc).get("region")
+    except Exception:
+        return None
+
+
+def resolve_region() -> str | None:
+    """Find the AWS region to use.
+
+    botocore only reads AWS_DEFAULT_REGION from the environment -- AWS_REGION
+    (which the other AWS SDKs honour) is ignored, and boto3 then fails with
+    "You must specify a region". Check both, then fall back to instance metadata.
+    """
+    return (
+        os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or _region_from_imds()
+    )
+
+
 def load_ssm_parameters(path: str) -> dict[str, str]:
     """Return every parameter under `path` as a NAME -> value mapping.
 
@@ -44,7 +90,15 @@ def load_ssm_parameters(path: str) -> dict[str, str]:
     if not path.endswith("/"):
         path += "/"
 
-    client = boto3.client("ssm")
+    region = resolve_region()
+    if not region:
+        raise RuntimeError(
+            "no AWS region found. Set AWS_REGION in deploy.env, or check that "
+            "the instance metadata service is reachable from the container."
+        )
+
+    print(f"entrypoint: using AWS region {region}", flush=True)
+    client = boto3.client("ssm", region_name=region)
     paginator = client.get_paginator("get_parameters_by_path")
 
     values: dict[str, str] = {}
