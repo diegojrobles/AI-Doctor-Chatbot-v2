@@ -1,13 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas.schemas import SymptomInput, AdviceOut
 from app.services.triage_service import triage_rules
 from app.services.llm_service import require_json_with_retry, PATIENT_RX_BLOCK
+from app.utils.rate_limit import limiter
 
 router = APIRouter()
 
 
+# Each call costs a paid LLM request, so cap how fast one caller can spend.
 @router.post("/advice", response_model=AdviceOut)
-def route_advice(inp: SymptomInput):
+@limiter.limit("20/minute")
+def route_advice(request: Request, inp: SymptomInput):
     # First check for emergencies using triage
     triage = triage_rules(inp.symptoms)
     if triage.risk == "emergency":

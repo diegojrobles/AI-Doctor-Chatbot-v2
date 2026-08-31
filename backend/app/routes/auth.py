@@ -1,5 +1,5 @@
 # app/routes/auth.py - FIXED VERSION
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -13,6 +13,7 @@ from app.services.auth_service import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     get_current_user,
 )
+from app.utils.rate_limit import limiter
 from typing import Annotated
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -37,8 +38,12 @@ def test_db_connection(db: db_dependency):
         )
 
 
+# Unauthenticated and reachable by anyone: strict limits. Registration is capped
+# tightly because each call runs an Argon2 hash; login is capped to slow password
+# guessing against a known username.
 @router.post("/register", response_model=Token)
-def register(user_data: UserCreate, db: db_dependency):
+@limiter.limit("5/hour")
+def register(request: Request, user_data: UserCreate, db: db_dependency):
     print(f"📝 Registration attempt for: {user_data.username}, {user_data.email}")
 
     try:
@@ -60,13 +65,17 @@ def register(user_data: UserCreate, db: db_dependency):
 
         print("✅ Creating new user...")
         hashed_password = get_password_hash(user_data.password)
+        # Role is assigned by the server, never taken from the request. Accepting
+        # a client-supplied role previously let anyone register as a clinician and
+        # call the clinician-only endpoints. Promotion is a manual DB change:
+        #   UPDATE users SET role = 'clinician' WHERE username = '...';
         db_user = User(
             username=user_data.username,
             email=user_data.email,
             hashed_password=hashed_password,
             age=user_data.age,
             sex=user_data.sex,
-            role=user_data.role,
+            role="patient",
         )
         db.add(db_user)
         db.commit()
@@ -75,11 +84,20 @@ def register(user_data: UserCreate, db: db_dependency):
 
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": user_data.username, "role": user_data.role},
+            data={
+                "sub": user_data.username,
+                "user_id": db_user.id,
+                "role": db_user.role,
+            },
             expires_delta=access_token_expires,
         )
         return {"access_token": access_token, "token_type": "bearer"}
 
+    except HTTPException:
+        # "username already taken" and friends are deliberate 4xx responses.
+        # Without this they were caught below and reported as a 500.
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         print(f"❌ Registration error: {str(e)}")
@@ -90,8 +108,11 @@ def register(user_data: UserCreate, db: db_dependency):
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("10/minute")
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
 ):
     print(f"🔐 Login attempt - identifier: '{form_data.username}'")
     user = authenticate_user(db, form_data.username, form_data.password)

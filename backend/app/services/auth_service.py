@@ -86,6 +86,26 @@ def get_current_user(
     return user
 
 
+def require_clinician(current_user=Depends(get_current_user)):
+    """Allow only clinician accounts through.
+
+    The role is read from the database rather than from the JWT claim, so that
+    revoking someone's clinician status takes effect on their next request
+    instead of whenever their current token happens to expire.
+
+    Registration always creates patients (see routes/auth.py). Promoting an
+    account is a deliberate database change:
+
+        UPDATE users SET role = 'clinician' WHERE username = '...';
+    """
+    if (current_user.role or "").strip().lower() != "clinician":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is restricted to clinician accounts.",
+        )
+    return current_user
+
+
 def authenticate_user(db, username: str, password: str):
     from app.database.models import User
 

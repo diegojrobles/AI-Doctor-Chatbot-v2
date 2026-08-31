@@ -7,6 +7,9 @@ from sqlalchemy import text
 from app.database.database import engine, Base
 from app.routes import triage, advice, referrals, rx_draft, auth, patient_profile
 from app.services.auth_service import verify_token
+from app.utils.rate_limit import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,7 +19,23 @@ try:
 except Exception as e:
     print(f"❌ Error creating tables: {e}")
 
-app = FastAPI(title="AI Doctor Backend (OpenRouter)")
+# The interactive docs enumerate every route, including the clinician-only ones.
+# They are useful in development and free reconnaissance in production, so they
+# are opt-in: set ENABLE_DOCS=true in deploy.env if you want them exposed.
+DOCS_ENABLED = os.getenv("ENABLE_DOCS", "false").strip().lower() in ("1", "true", "yes")
+
+app = FastAPI(
+    title="AI Doctor Backend (OpenRouter)",
+    docs_url="/docs" if DOCS_ENABLED else None,
+    redoc_url="/redoc" if DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if DOCS_ENABLED else None,
+)
+
+# Rate limiting. Registration and login are unauthenticated and reachable by
+# anyone; /advice and friends each cost a paid LLM call. Without this, one
+# script can run up the OpenRouter bill or brute-force a password.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # EHR Configuration
 EHR_ENABLED = True

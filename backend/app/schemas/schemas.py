@@ -14,12 +14,17 @@ from datetime import datetime, date, time
 
 
 class UserCreate(BaseModel):
-    username: str
+    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str
-    age: int
-    sex: str
-    role: str = Field(..., description="User role: patient or clinician")
+    # max_length is a denial-of-service guard as much as a policy: Argon2 hashing
+    # cost grows with input size, so an unbounded password field lets a caller
+    # burn CPU on every request.
+    password: str = Field(..., min_length=10, max_length=128)
+    age: int = Field(..., ge=0, le=120)
+    sex: str = Field(..., max_length=32)
+    # NOTE: "role" is deliberately absent. It used to be a required client-supplied
+    # field, which let anyone register as a clinician and reach the clinician-only
+    # endpoints. Registration now always creates a patient; see routes/auth.py.
 
 
 class UserLogin(BaseModel):
