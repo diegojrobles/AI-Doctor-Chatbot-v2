@@ -44,17 +44,20 @@ cd AI-Doctor-Chatbot-v2
 
 ### 2️⃣ Backend Setup (FastAPI)
 ```bash
-cd server
+cd backend
 cp .env.example .env
-# Add your API key and configuration to .env
-docker compose up --build
+# Add your API keys and configuration to .env
+cd ..
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
 Verify the backend:
 ```bash
 curl http://localhost:8000/health
-# → {"ok": true}
+# → {"status":"healthy","database":"connected", ...}
 ```
+
+For deploying this to AWS, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ### 3️⃣ Frontend Setup (Expo)
 ```bash

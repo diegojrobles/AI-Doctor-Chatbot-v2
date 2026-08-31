@@ -12,8 +12,12 @@ venv/
 env/
 .venv/
 
-Dockerfile
-docker-compose.yml
+# Node / Expo (the frontend is not deployed, and node_modules must never be
+# committed -- it was, which is why this repo's history is ~115MB).
+node_modules/
+**/node_modules/
+.expo/
+**/.expo/
 
 # macOS
 .DS_Store

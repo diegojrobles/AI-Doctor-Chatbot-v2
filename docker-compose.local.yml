@@ -1,0 +1,34 @@
+# Local development / verification override.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#
+# Differences from production:
+#   - no Caddy and no TLS (nothing to get a certificate for on a laptop)
+#   - the api port is published to the host so you can curl it directly
+#   - SSM is disabled, so the app reads backend/.env through python-dotenv
+#
+# This file is for laptops only. Never use it on the EC2 host: it would expose
+# the application to the internet without TLS.
+
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: localdev
+
+  api:
+    environment:
+      DATABASE_URL: postgresql://aidoctor:localdev@db:5432/aidoctor
+      # Empty string disables the SSM fetch in entrypoint.py.
+      AIDOCTOR_SSM_PATH: ""
+      ALLOWED_ORIGINS: "http://localhost:8081"
+    env_file:
+      # Supplies OPENROUTER_API_KEY / PINECONE_API_KEY locally. Gitignored.
+      - path: backend/.env
+        required: false
+    ports:
+      - "8000:8000"
+
+  caddy:
+    # Not used locally. `replicas: 0` keeps the service defined but never starts it.
+    deploy:
+      replicas: 0

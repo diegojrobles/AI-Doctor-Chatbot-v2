@@ -1,0 +1,40 @@
+# Caddy reverse proxy for the AI Doctor backend.
+#
+# Caddy obtains and renews a Let's Encrypt certificate for {$DOMAIN} on its own.
+# The only prerequisites are that DNS for that name already points at this host
+# and that ports 80 and 443 are reachable from the internet -- Let's Encrypt
+# proves domain ownership by connecting back to it over port 80.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip
+
+	# The application listens on port 8000 inside the compose network. It is
+	# not published to the host, so this is the only way in.
+	reverse_proxy api:8000 {
+		# LLM calls can take a while. Keep this comfortably above the app's own
+		# gunicorn timeout (90s) so Caddy is never the component that gives up
+		# first -- otherwise you get a 502 that hides the real error.
+		transport http {
+			response_header_timeout 120s
+		}
+	}
+
+	# Basic hardening. HSTS is deliberately omitted: it is hard to undo if you
+	# ever need to serve this name over plain HTTP again. Add it once you are
+	# confident the domain stays on HTTPS permanently.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

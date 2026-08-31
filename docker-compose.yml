@@ -1,0 +1,87 @@
+# AI Doctor backend -- production stack for a single EC2 host.
+#
+# Three containers:
+#   caddy  -- terminates HTTPS with an automatic Let's Encrypt certificate
+#   api    -- the FastAPI application (never exposed to the internet directly)
+#   db     -- PostgreSQL, persisted on a Docker volume backed by the EBS disk
+#
+# Secrets are NOT stored in this file, and NOT in a .env file on the host.
+# POSTGRES_PASSWORD is exported into the shell by deploy.sh, which reads it from
+# SSM Parameter Store. Application secrets (OpenRouter, Pinecone) are fetched by
+# the api container itself at start via backend/entrypoint.py and the instance role.
+#
+# Required in the environment when running `docker compose up`:
+#   DOMAIN             e.g. api.diegojrobles.com
+#   ACME_EMAIL         e.g. you@example.com  (Let's Encrypt expiry notices)
+#   POSTGRES_PASSWORD  exported by deploy.sh from SSM
+#   ALLOWED_ORIGINS    comma-separated browser origins
+#   AIDOCTOR_SSM_PATH  e.g. /aidoctor/prod/
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aidoctor
+      POSTGRES_DB: aidoctor
+      # ":?" makes compose refuse to start if this is not set, rather than
+      # silently bringing up a database with a blank password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set - run deploy.sh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No `ports:` entry on purpose. Postgres is reachable only from the other
+    # containers on this network, never from the internet.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aidoctor -d aidoctor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://aidoctor:${POSTGRES_PASSWORD:?}@db:5432/aidoctor
+      AIDOCTOR_SSM_PATH: ${AIDOCTOR_SSM_PATH:-/aidoctor/prod/}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set - do not use * in production}
+      MODEL: ${MODEL:-openrouter/free}
+      APP_REFERER: ${APP_REFERER:-https://api.diegojrobles.com}
+      APP_TITLE: ${APP_TITLE:-AI Doctor App}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Also no `ports:`. Only caddy talks to the app, over the internal network.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # required: Let's Encrypt validates over port 80
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set, e.g. api.diegojrobles.com}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set for certificate notices}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # caddy_data holds the issued certificates and the ACME account key.
+      # Losing it means re-issuing certs, and Let's Encrypt rate-limits that,
+      # so it must be a named volume rather than a throwaway container layer.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

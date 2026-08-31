@@ -1,0 +1,35 @@
+# Keep the build context small and, more importantly, keep secrets and local
+# state out of the image entirely.
+
+# Secrets. These must never enter a layer.
+.env
+*.env
+**/.env
+**/.env.*
+!**/.env.example
+.key
+
+# Local Python state
+**/venv/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+
+# The frontend is not deployed. node_modules is enormous and irrelevant here.
+frontend/
+node_modules/
+**/node_modules/
+.expo/
+
+# Vestigial: retrieval runs on Pinecone, nothing reads this directory.
+chroma_storage/
+
+# VCS and OS noise
+.git/
+.gitignore
+**/.DS_Store
+
+# Deployment config is mounted at runtime, not built into the app image
+Caddyfile
+docker-compose.yml
+DEPLOYMENT.md
