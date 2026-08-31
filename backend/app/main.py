@@ -1,6 +1,7 @@
 # app/main.py - FIXED VERSION
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 from sqlalchemy import text
 from app.database.database import engine, Base
@@ -24,11 +25,22 @@ FHIR_BASE_URL = os.getenv("FHIR_BASE_URL", "https://hapi.fhir.org/baseR4")
 print(f" EHR Integration: {'ENABLED' if EHR_ENABLED else 'DISABLED'}")
 print(f" FHIR Server: {FHIR_BASE_URL}")
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# Comma-separated list of allowed browser origins. Defaults to local dev only:
+# production must set ALLOWED_ORIGINS explicitly. Native iOS clients do not send
+# an Origin header, so CORS does not apply to them -- this is for web callers.
+ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8081").split(",") if o.strip()
+]
+
+# "*" and allow_credentials=True is rejected by browsers, and echoing arbitrary
+# origins back with credentials enabled would let any site make authenticated
+# calls on a logged-in user's behalf. Only send credentials to a known origin list.
+ALLOW_CREDENTIALS = "*" not in ALLOWED_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,16 +51,22 @@ async def authenticate_request(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    # Skip auth for these public endpoints
-    public_paths = [
-        "/auth/login",
-        "/auth/register",
+    # Public endpoints, matched exactly. "/" MUST be matched exactly and never
+    # used as a prefix: every path starts with "/", so a prefix test against it
+    # makes this entire middleware a no-op and leaves every route unauthenticated.
+    public_exact = {
         "/",
         "/health",
         "/docs",
         "/redoc",
         "/openapi.json",
         "/favicon.ico",
+    }
+
+    # Public endpoints, matched by prefix (these have sub-paths).
+    public_prefixes = (
+        "/auth/login",
+        "/auth/register",
         "/patient/discover",
         # "/patient/profile",
         # "/patient/medications",
@@ -56,22 +74,33 @@ async def authenticate_request(request: Request, call_next):
         "/triage",
         # "/analytics",
         "/metrics",
-    ]
+    )
 
-    # Check if path starts with any public path
-    if any(request.url.path.startswith(path) for path in public_paths):
+    path = request.url.path
+    if path in public_exact or path.startswith(public_prefixes):
         return await call_next(request)
 
-    # Check for Authorization header
+    # NOTE: raising HTTPException from inside an @app.middleware("http") function
+    # does NOT produce a 401 -- Starlette's BaseHTTPMiddleware runs outside the
+    # exception handlers that translate HTTPException into a response, so it
+    # surfaces as an unhandled 500. Return a JSONResponse explicitly instead.
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     token = auth_header.replace("Bearer ", "")
     payload = verify_token(token)
 
     if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid or expired token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     print(f"🔐 Auth: Valid token for user {payload.get('sub')} - {request.url.path}")
 
