@@ -542,14 +542,54 @@ docker logs ai-doctor-chatbot-v2-api-1 --tail 40
 docker logs ai-doctor-chatbot-v2-caddy-1 --tail 40
 ```
 
-To change a secret, update it in SSM and restart — the container re-reads SSM
-on every start:
+### Changing a secret
+
+Two machines are involved, on purpose. The instance role is **read-only** on
+SSM, so writing a secret from the server fails with:
+
+```
+AccessDeniedException ... not authorized to perform: ssm:PutParameter
+```
+
+That is the least-privilege design working: a compromised web server can read
+the secrets it needs to run, but cannot rewrite them.
+
+**On your laptop** (admin IAM user), write the new value:
 
 ```bash
 aws ssm put-parameter --name /aidoctor/prod/OPENROUTER_API_KEY \
   --value 'sk-or-v1-NEW' --type SecureString --overwrite
-docker compose restart api
 ```
+
+**On the server**, restart so the container re-reads SSM. Secrets are loaded at
+container start, so a `put-parameter` alone changes nothing:
+
+```bash
+./dc.sh restart api
+```
+
+Verify the stored key without printing it. A valid OpenRouter key is
+`sk-or-v1-` plus 64 hex characters — length 73. Anything longer usually means a
+trailing space or newline was captured when copying:
+
+```bash
+aws ssm get-parameter --name /aidoctor/prod/OPENROUTER_API_KEY --with-decryption \
+  --query Parameter.Value --output text \
+  | awk '{print "prefix:", substr($0,1,12) "... length:", length($0)}'
+```
+
+Confirm the key is actually accepted by the provider (reads work on the server):
+
+```bash
+KEY=$(aws ssm get-parameter --name /aidoctor/prod/OPENROUTER_API_KEY \
+  --with-decryption --query Parameter.Value --output text)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://openrouter.ai/api/v1/auth/key -H "Authorization: Bearer $KEY"
+```
+
+`200` means the key is valid. `401` means SSM holds a wrong or revoked key --
+`put-parameter` succeeds regardless of whether the value is a working key, so a
+stale paste looks identical to success until the app tries to use it.
 
 ---
 
