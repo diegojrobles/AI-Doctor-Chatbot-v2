@@ -520,12 +520,26 @@ git pull
 
 Postgres data and the TLS certificate live in Docker volumes and survive this.
 
-Useful checks:
+Useful checks. Note the `./dc.sh` wrapper rather than plain `docker compose`:
+the compose file requires `POSTGRES_PASSWORD`, which `deploy.sh` exports only
+into its own process, so a bare `docker compose ps` fails with
+`required variable POSTGRES_PASSWORD is missing a value`. The wrapper loads the
+same config first, then passes your arguments through.
 
 ```bash
-docker compose ps            # what is running
-docker compose logs -f api   # follow application logs
-docker compose logs caddy    # certificate problems show up here
+./dc.sh ps              # what is running
+./dc.sh logs -f api     # follow application logs
+./dc.sh logs caddy      # certificate problems show up here
+./dc.sh restart api
+```
+
+If the wrapper itself is failing, read the containers directly — this needs no
+environment at all:
+
+```bash
+docker ps                                            # exact container names
+docker logs ai-doctor-chatbot-v2-api-1 --tail 40
+docker logs ai-doctor-chatbot-v2-caddy-1 --tail 40
 ```
 
 To change a secret, update it in SSM and restart — the container re-reads SSM
